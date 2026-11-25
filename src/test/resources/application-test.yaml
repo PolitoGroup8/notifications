@@ -6,5 +6,7 @@ spring:
   rabbitmq:
     listener:
       simple:
-        # Consumers are started by the tests that need them, not at context start-up.
-        auto-startup: false
+        retry:
+          # Same behaviour as in application.yaml, but faster, so the tests do not wait.
+          initial-interval: 100ms
+          multiplier: 1

@@ -44,6 +44,8 @@ dependencies {
     testImplementation("org.testcontainers:testcontainers-junit-jupiter")
     testImplementation("org.testcontainers:testcontainers-postgresql")
     testImplementation("org.testcontainers:testcontainers-rabbitmq")
+    // waits until an asynchronous effect (e.g. a consumed message) becomes visible
+    testImplementation("org.awaitility:awaitility-kotlin")
 }
 
 kotlin {
