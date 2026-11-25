@@ -1,0 +1,43 @@
+# Local infrastructure of the notifications service: its own PostgreSQL and a pgAdmin.
+# The application itself runs on the host (IntelliJ or ./gradlew bootRun).
+# RabbitMQ is started from the rabbitMQ repository.
+
+services:
+  notifications-db:
+    image: postgres:17
+    container_name: notifications-db
+    ports:
+      - "${NOTIFICATIONS_DB_PORT}:5432"
+    environment:
+      POSTGRES_DB: ${NOTIFICATIONS_DB_NAME}
+      POSTGRES_USER: ${NOTIFICATIONS_DB_USER}
+      POSTGRES_PASSWORD: ${NOTIFICATIONS_DB_PASSWORD}
+    volumes:
+      - notifications_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${NOTIFICATIONS_DB_USER} -d ${NOTIFICATIONS_DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  notifications-pgadmin:
+    image: dpage/pgadmin4
+    container_name: notifications-pgadmin
+    ports:
+      - "${NOTIFICATIONS_PGADMIN_PORT}:80"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${NOTIFICATIONS_PGADMIN_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${NOTIFICATIONS_PGADMIN_PASSWORD}
+    volumes:
+      - notifications_pgadmin_data:/var/lib/pgadmin
+    restart: unless-stopped
+    depends_on:
+      notifications-db:
+        condition: service_healthy
+
+# Names prefixed with the service, so they do not collide with the volumes of the other
+# services when the compose files are combined (configuration repository).
+volumes:
+  notifications_postgres_data:
+  notifications_pgadmin_data:

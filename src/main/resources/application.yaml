@@ -1,0 +1,15 @@
+spring:
+  application:
+    name: notifications
+  profiles:
+    # Without an explicit profile the service starts with "local" (application-local.yaml + .env).
+    default: local
+  jpa:
+    open-in-view: false
+    show-sql: false
+    hibernate:
+      # The schema is owned by Flyway (db/migration): Hibernate only checks that the
+      # entities match it, and refuses to start if they do not.
+      ddl-auto: validate
+  flyway:
+    enabled: true

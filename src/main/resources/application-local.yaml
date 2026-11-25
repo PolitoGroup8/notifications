@@ -1,0 +1,24 @@
+# Local development profile: the service runs on the developer machine (IntelliJ or
+# ./gradlew bootRun) and reaches PostgreSQL and RabbitMQ through the ports published
+# by their docker compose. Values come from the .env file of this repository.
+
+server:
+  port: ${NOTIFICATIONS_PORT}
+
+spring:
+  config:
+    import: optional:file:.env[.properties]
+  datasource:
+    url: jdbc:postgresql://${NOTIFICATIONS_DB_HOST}:${NOTIFICATIONS_DB_PORT}/${NOTIFICATIONS_DB_NAME}
+    username: ${NOTIFICATIONS_DB_USER}
+    password: ${NOTIFICATIONS_DB_PASSWORD}
+  rabbitmq:
+    host: ${RABBITMQ_HOST}
+    port: ${RABBITMQ_PORT}
+    username: ${RABBITMQ_DEFAULT_USER}
+    password: ${RABBITMQ_DEFAULT_PASS}
+
+logging:
+  level:
+    root: INFO
+    it.polito.wa2.group8: DEBUG

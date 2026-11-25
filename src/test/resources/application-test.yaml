@@ -1,0 +1,10 @@
+# Profile used by the tests (@ActiveProfiles("test")).
+# It replaces the default "local" profile, so application-local.yaml and the .env
+# variables are not read: database and broker come from TestcontainersConfiguration.
+
+spring:
+  rabbitmq:
+    listener:
+      simple:
+        # Consumers are started by the tests that need them, not at context start-up.
+        auto-startup: false
