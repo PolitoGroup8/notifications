@@ -41,6 +41,23 @@ Requirements: Docker running, JDK 21 (Gradle is downloaded by the wrapper).
 | PostgreSQL | `localhost:5434` |
 | pgAdmin | `http://localhost:5052` (server host: `notifications-db`) |
 
+## Health
+
+`GET /api/v1/health` (no authentication, as in `notifications.yaml`): checks that the database
+answers and that the broker consumer is ready (RabbitMQ connection open and `TicketsIssued`
+listener running). Each check has a time limit (`notifications.health.check-timeout`, 2 s).
+
+| Result | Response |
+|---|---|
+| Ready | `200` `{"status":"UP"}` |
+| Database or broker not ready | `503` RFC 9457 problem (`application/problem+json`), `code: not-ready` |
+
+Both responses carry `Cache-Control: no-store`.
+
+```powershell
+curl.exe -i http://localhost:8082/api/v1/health
+```
+
 ## Messaging
 
 Notifications declares its RabbitMQ objects from code at start-up (`RabbitConfig`):
