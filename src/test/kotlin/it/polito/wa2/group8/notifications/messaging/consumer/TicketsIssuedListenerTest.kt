@@ -90,6 +90,30 @@ class TicketsIssuedListenerTest {
     }
 
     @Test
+    fun `two different events for the same order create only one email`() {
+        publish(ticketsIssuedJson(eventId = "evt-first", orderId = "ord-same"))
+        publish(ticketsIssuedJson(eventId = "evt-second", orderId = "ord-same"))
+        publish(ticketsIssuedJson(eventId = "evt-after", orderId = "ord-after"))
+
+        await atMost timeout untilAsserted {
+            assertEquals(1, emailNotificationsRepository.findByOrderId("ord-after").size)
+        }
+        // Both events are recorded (a redelivery of either is recognised), but the order
+        // has a single email, the one created by the first event.
+        assertEquals(3, incomingMessagesRepository.count())
+        assertEquals(1, emailNotificationsRepository.findByOrderId("ord-same").size)
+        val sourceEvent = jdbc.queryForObject(
+            """
+            SELECT m.external_message_id
+            FROM email_notifications e JOIN incoming_messages m ON m.id = e.incoming_message_id
+            WHERE e.order_id = 'ord-same'
+            """.trimIndent(),
+            String::class.java,
+        )
+        assertEquals("evt-first", sourceEvent)
+    }
+
+    @Test
     fun `without eventId the AMQP message-id is the deduplication key`() {
         val event = ticketsIssuedJson(eventId = null, orderId = "ord-no-event-id")
         publish(event, amqpMessageId = "amqp-msg-1")

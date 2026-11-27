@@ -1,6 +1,5 @@
 package it.polito.wa2.group8.notifications.service
 
-import it.polito.wa2.group8.notifications.db.EmailNotificationEntity
 import it.polito.wa2.group8.notifications.email.EmailComposer
 import it.polito.wa2.group8.notifications.messaging.dto.TicketsIssuedMessage
 import it.polito.wa2.group8.notifications.repository.EmailNotificationsRepository
@@ -11,7 +10,16 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
 /** Result of handling one delivery. */
-enum class HandleOutcome { ACCEPTED, DUPLICATE }
+enum class HandleOutcome {
+    /** New event: a PENDING email was created. */
+    ACCEPTED,
+
+    /** The same event (same eventId) was already received: nothing done. */
+    DUPLICATE,
+
+    /** A new event, but its order already has an email: event recorded, no second email. */
+    DUPLICATE_ORDER,
+}
 
 /**
  * The event cannot be processed, now or ever (unsupported type/version, missing or invalid
@@ -21,11 +29,12 @@ enum class HandleOutcome { ACCEPTED, DUPLICATE }
 class InvalidEventException(message: String) : AmqpRejectAndDontRequeueException(message)
 
 /**
- * Turns a TicketsIssued event into a PENDING email, exactly once per event.
+ * Turns a TicketsIssued event into a PENDING email: once per event, and once per order.
  *
  * Everything happens in ONE database transaction:
  *   1. record the event in incoming_messages (or detect that it was already recorded);
- *   2. create the email_notifications row, PENDING.
+ *   2. create the email_notifications row, PENDING, unless the order already has one
+ *      (a different event for the same order: eventi.md, "una richiesta email per orderId").
  * Either both are committed or neither is. If anything fails, the transaction is rolled back,
  * the listener throws, and the broker delivers the message again: since the event was not
  * recorded, it is processed from scratch. If the commit succeeds and the message is then
@@ -64,15 +73,22 @@ class TicketsIssuedHandler(
         }
 
         val email = emailComposer.composeTicketsIssued(event.data)
-        emailNotificationsRepository.save(
-            EmailNotificationEntity(
-                incomingMessageId = incomingId,
-                orderId = event.data.orderId,
-                recipient = email.recipient,
-                subject = email.subject,
-                body = email.body,
-            ),
+        val emailId = emailNotificationsRepository.insertIfNoEmailForOrder(
+            incomingMessageId = incomingId,
+            orderId = event.data.orderId,
+            recipient = email.recipient,
+            subject = email.subject,
+            body = email.body,
         )
+        if (emailId == null) {
+            // A different event (another eventId) for an order that already has its email.
+            // The event stays recorded, so a redelivery of it is recognised by step 1.
+            logger.warn(
+                "TicketsIssued for an order that already has its email, ignored: eventId={}, orderId={}",
+                externalId, event.data.orderId,
+            )
+            return HandleOutcome.DUPLICATE_ORDER
+        }
 
         logger.info(
             "TicketsIssued accepted: eventId={}, orderId={}, {} ticket(s), email PENDING for {}",

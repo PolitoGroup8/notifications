@@ -60,6 +60,7 @@ What happens to a `TicketsIssued` message:
 |---|---|
 | Valid, first delivery | event recorded in `incoming_messages` + email `PENDING` in `email_notifications`, in one transaction |
 | Same `eventId` again | recognised as duplicate, nothing created, message acknowledged |
+| Different `eventId`, but the order already has its email | event recorded, no second email (one email per order), message acknowledged |
 | Not valid JSON, unsupported `type`/`version`, missing or invalid `orderId`/`customerEmail` | rejected, moved to the dead letter queue |
 | Temporary error (e.g. database unavailable) | retried in the listener (3 attempts), then moved to the dead letter queue |
 
@@ -127,6 +128,12 @@ creates the email: either both are stored or neither is.
 History of the emails and, at the same time, the retry queue. A row is created `PENDING`
 when an event is accepted; a scheduled job sends the due `PENDING` rows and marks them
 `SENT`, or schedules a new attempt, and marks them `FAILED` after the last one.
+
+One confirmation email per order (`eventi.md`: "una richiesta email per `orderId`"): the
+unique index `uq_email_notifications_order` (migration V2) and
+`INSERT ... ON CONFLICT (order_id) DO NOTHING` skip a second, different event for the same
+order. Together with `incoming_messages`, duplicates are stopped at two levels: the same
+event (same `eventId`) and the same order (different `eventId`).
 
 | Column | Meaning |
 |---|---|
