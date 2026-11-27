@@ -36,3 +36,19 @@ notifications:
     tickets-issued-queue: notifications.tickets-issued
     dead-letter-exchange: notifications.dlx
     tickets-issued-dlq: notifications.tickets-issued.dlq
+  email:
+    # How emails leave the service: "log" writes them to the log (development).
+    # A real SMTP sender (e.g. Mailpit) will be selected here.
+    sender: log
+    dispatch:
+      scheduler:
+        enabled: true
+        # Pause between the end of a run of the sending job and the start of the next one.
+        poll-interval-ms: 5000
+      # Emails sent at most per run.
+      batch-size: 20
+      # Attempts per email (the first included); waits 30s, 1m, 2m, 4m; then FAILED.
+      max-attempts: 5
+      initial-backoff: 30s
+      multiplier: 2
+      max-backoff: 30m

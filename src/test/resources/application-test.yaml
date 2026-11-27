@@ -10,3 +10,11 @@ spring:
           # Same behaviour as in application.yaml, but faster, so the tests do not wait.
           initial-interval: 100ms
           multiplier: 1
+
+notifications:
+  email:
+    dispatch:
+      scheduler:
+        # The tests call the sending job directly (EmailDispatcher), so that it does not
+        # change the emails while other tests are checking them.
+        enabled: false
