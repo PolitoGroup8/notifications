@@ -13,3 +13,26 @@ spring:
       ddl-auto: validate
   flyway:
     enabled: true
+  rabbitmq:
+    listener:
+      simple:
+        # A listener exception must never put the message back in the queue forever
+        # (a message that always fails would be redelivered in a loop).
+        default-requeue-rejected: false
+        retry:
+          # A failing message is retried in the listener a few times (e.g. database briefly
+          # unavailable), then rejected: the broker moves it to the dead letter queue.
+          enabled: true
+          max-retries: 2
+          initial-interval: 1s
+          multiplier: 2
+
+notifications:
+  messaging:
+    # Provisional names of the Tickets side, to be agreed with Tickets.
+    tickets-exchange: tickets-events
+    tickets-issued-routing-key: tickets.issued
+    # Owned by Notifications.
+    tickets-issued-queue: notifications.tickets-issued
+    dead-letter-exchange: notifications.dlx
+    tickets-issued-dlq: notifications.tickets-issued.dlq

@@ -41,6 +41,59 @@ Requirements: Docker running, JDK 21 (Gradle is downloaded by the wrapper).
 | PostgreSQL | `localhost:5434` |
 | pgAdmin | `http://localhost:5052` (server host: `notifications-db`) |
 
+## Messaging
+
+Notifications declares its RabbitMQ objects from code at start-up (`RabbitConfig`):
+
+| Object | Name | Notes |
+|---|---|---|
+| Exchange (Tickets) | `tickets-events` | `topic`, durable. **Provisional**, to be agreed with Tickets |
+| Queue | `notifications.tickets-issued` | bound to `tickets-events` with routing key `tickets.issued` (provisional) |
+| Dead letter exchange | `notifications.dlx` | `direct` |
+| Dead letter queue | `notifications.tickets-issued.dlq` | messages Notifications gave up on, kept for inspection |
+
+Names can be changed in `application.yaml` (`notifications.messaging.*`).
+
+What happens to a `TicketsIssued` message:
+
+| Case | Result |
+|---|---|
+| Valid, first delivery | event recorded in `incoming_messages` + email `PENDING` in `email_notifications`, in one transaction |
+| Same `eventId` again | recognised as duplicate, nothing created, message acknowledged |
+| Not valid JSON, unsupported `type`/`version`, missing or invalid `orderId`/`customerEmail` | rejected, moved to the dead letter queue |
+| Temporary error (e.g. database unavailable) | retried in the listener (3 attempts), then moved to the dead letter queue |
+
+### Provisional message format
+
+Until Tickets publishes `TicketsIssued`, it can be published by hand from the RabbitMQ
+management UI (`http://localhost:15672`): **Exchanges** → `tickets-events` → **Publish message**,
+routing key `tickets.issued`, property `content_type` = `application/json`, payload:
+
+```json
+{
+  "eventId": "e5b0c1d2-0000-0000-0000-000000000001",
+  "type": "TicketsIssued",
+  "version": 1,
+  "occurredAt": "2026-11-20T18:42:09Z",
+  "producer": "tickets",
+  "data": {
+    "orderId": "ord_01JD8W",
+    "customerEmail": "mario@example.com",
+    "customerName": "Mario Rossi",
+    "event": { "eventTitle": "Concerto X", "startsAt": "2026-12-05T20:30:00Z",
+               "venueName": "Teatro Y", "venueCity": "Torino" },
+    "tickets": [
+      { "ticketId": "tkt_01JD9A", "orderLineId": "ol_1", "seatId": "seat_01JB7Q",
+        "seatLabel": "E14", "sectorId": "s1", "sector": "Platea" }
+    ]
+  }
+}
+```
+
+Required: `type` (`TicketsIssued`), `version` (`1`), `data.orderId`, `data.customerEmail`, and
+`eventId` (or the AMQP `message_id` property). Every other field is optional, and unknown
+fields are ignored, so Tickets can add fields without breaking Notifications.
+
 ## Tests
 
 ```powershell
