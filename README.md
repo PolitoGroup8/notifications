@@ -60,6 +60,7 @@ What happens to a `TicketsIssued` message:
 |---|---|
 | Valid, first delivery | event recorded in `incoming_messages` + email `PENDING` in `email_notifications`, in one transaction |
 | Same `eventId` again | recognised as duplicate, nothing created, message acknowledged |
+| Different `eventId`, but the order already has its email | event recorded, no second email (one email per order), message acknowledged |
 | Not valid JSON, unsupported `type`/`version`, missing or invalid `orderId`/`customerEmail` | rejected, moved to the dead letter queue |
 | Temporary error (e.g. database unavailable) | retried in the listener (3 attempts), then moved to the dead letter queue |
 
@@ -94,6 +95,34 @@ Required: `type` (`TicketsIssued`), `version` (`1`), `data.orderId`, `data.custo
 `eventId` (or the AMQP `message_id` property). Every other field is optional, and unknown
 fields are ignored, so Tickets can add fields without breaking Notifications.
 
+## Sending job
+
+A scheduled job (`EmailDispatchScheduler` → `EmailDispatcher`) sends the `PENDING` emails
+whose `next_attempt_at` has passed, oldest first, **one email per transaction**:
+
+1. lock the next due email with `SELECT ... FOR UPDATE SKIP LOCKED` (a second instance of
+   Notifications skips it and takes another one, so no email is sent by two jobs at once);
+2. hand it to the `EmailSender`;
+3. success → `SENT` with `sent_at`; failure → `attempts + 1`, `last_error`, and
+   `next_attempt_at` moved later (30 s, 1 min, 2 min, 4 min); after the 5th failed attempt → `FAILED`;
+4. commit.
+
+For now the sender writes the email to the log (`notifications.email.sender: log`); an SMTP
+sender (Mailpit) will be selected with the same property.
+
+The mail server is not part of the database transaction: if the service stops after sending
+an email and before the commit, that email is sent again at restart (at-least-once delivery).
+Committing after every email limits this to one email; the row id is passed to the sender to
+be used as `Message-ID`, so the two copies are recognisable as the same message.
+
+| Property (`notifications.email.dispatch.*`) | Default | Meaning |
+|---|---|---|
+| `scheduler.enabled` | `true` | runs the job (off in the tests, which call it directly) |
+| `scheduler.poll-interval-ms` | `5000` | pause between the end of a run and the next one |
+| `batch-size` | `20` | emails sent at most per run |
+| `max-attempts` | `5` | attempts per email, the first one included |
+| `initial-backoff`, `multiplier`, `max-backoff` | `30s`, `2`, `30m` | waits between attempts |
+
 ## Tests
 
 ```powershell
@@ -127,6 +156,12 @@ creates the email: either both are stored or neither is.
 History of the emails and, at the same time, the retry queue. A row is created `PENDING`
 when an event is accepted; a scheduled job sends the due `PENDING` rows and marks them
 `SENT`, or schedules a new attempt, and marks them `FAILED` after the last one.
+
+One confirmation email per order (`eventi.md`: "una richiesta email per `orderId`"): the
+unique index `uq_email_notifications_order` (migration V2) and
+`INSERT ... ON CONFLICT (order_id) DO NOTHING` skip a second, different event for the same
+order. Together with `incoming_messages`, duplicates are stopped at two levels: the same
+event (same `eventId`) and the same order (different `eventId`).
 
 | Column | Meaning |
 |---|---|
