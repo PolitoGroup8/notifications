@@ -16,8 +16,9 @@ data class ComposedEmail(
  * Builds the confirmation email from the data of a TicketsIssued event.
  *
  * Pure function of its input (no I/O): easy to unit test and to change.
- * No entry credential or QR code is put in the email (D009): it points the customer
- * to the personal area, where the tickets are shown after login.
+ * Plain text only: the QR codes (qrObjectKey of each ticket) are not attached yet, because
+ * for now the email is written to the log; attaching them needs a real sender (SMTP) that
+ * downloads the images from the RustFS bucket of Tickets.
  */
 @Component
 class EmailComposer {
@@ -46,7 +47,7 @@ class EmailComposer {
                     val seat = listOfNotNull(
                         ticket.sector?.let { "settore $it" },
                         ticket.seatLabel?.let { "posto $it" },
-                    ).joinToString(", ").ifEmpty { ticket.ticketId ?: "biglietto" }
+                    ).joinToString(", ").ifEmpty { "biglietto ${ticket.ticketId ?: ""}".trim() }
                     appendLine("- $seat")
                 }
                 appendLine()

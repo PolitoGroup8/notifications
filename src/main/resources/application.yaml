@@ -29,7 +29,7 @@ spring:
 
 notifications:
   messaging:
-    # Provisional names of the Tickets side, to be agreed with Tickets.
+    # Exchange and routing key on which Tickets publishes TICKETS_ISSUED.
     tickets-exchange: tickets-events
     tickets-issued-routing-key: tickets.issued
     # Owned by Notifications.

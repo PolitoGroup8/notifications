@@ -114,7 +114,8 @@ class TicketsIssuedHandler(
     }
 
     companion object {
-        const val SUPPORTED_TYPE = "TicketsIssued"
+        // Naming agreed with Tickets and Sales (ORDER_PAID, TICKETS_ISSUED).
+        const val SUPPORTED_TYPE = "TICKETS_ISSUED"
         const val SUPPORTED_VERSION = 1
 
         // Same limit as the recipient column (varchar(254)): a longer address is invalid data,

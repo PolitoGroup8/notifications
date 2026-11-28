@@ -4,26 +4,24 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import java.time.Instant
 
 /**
- * The TicketsIssued event published by Tickets when all the tickets of an order are issued.
- *
- * PROVISIONAL FORMAT: envelope of eventi.md (M2) + the data available in Tickets
- * (NewTicket and the order snapshot). To be aligned with Tickets when they publish it.
+ * The TICKETS_ISSUED event published by Tickets when all the tickets of an order are issued
+ * (Tickets repository, src/events.rs and RABBIT_MQ.md):
  *
  * {
- *   "eventId": "e5b0c1d2-...",
- *   "type": "TicketsIssued",
+ *   "eventId": "85fb487d-28ce-4e47-a525-236fa564895a",
+ *   "type": "TICKETS_ISSUED",
  *   "version": 1,
- *   "occurredAt": "2026-11-20T18:42:09Z",
  *   "producer": "tickets",
+ *   "occurredAt": "2026-11-25T17:00:00Z",
  *   "data": {
- *     "orderId": "ord_01JD8W",
- *     "customerEmail": "mario@example.com",
- *     "customerName": "Mario Rossi",
- *     "event": { "eventTitle": "Concerto X", "startsAt": "2026-12-05T20:30:00Z",
- *                "venueName": "Teatro Y", "venueCity": "Torino" },
+ *     "orderId": "ordine-1",
+ *     "customerEmail": "customer@example.test",
+ *     "customerName": "Mario Rossi",                 (only when known)
+ *     "event": { "eventTitle": "Concerto", "startsAt": "2026-12-10T20:00:00Z",
+ *                "venueName": "Teatro", "venueCity": "Torino" },
  *     "tickets": [
- *       { "ticketId": "tkt_01JD9A", "orderLineId": "ol_1", "seatId": "seat_01JB7Q",
- *         "seatLabel": "E14", "sectorId": "s1", "sector": "Platea" }
+ *       { "ticketId": "b63fe671-...", "qrObjectKey": "tickets/b63fe671-.../qr.png",
+ *         "seatLabel": "E14", "sector": "platea" }
  *     ]
  *   }
  * }
@@ -60,12 +58,18 @@ data class EventInfo(
     val venueCity: String? = null,
 )
 
+/**
+ * One issued ticket. Only what the email uses is read.
+ *
+ * @property qrObjectKey key of the QR image in the private RustFS bucket of Tickets
+ *                       (tickets/<ticketId>/qr.png). Not used yet: the email is written to the
+ *                       log, so there is nothing to attach; kept for the attachments.
+ * @property sector      name of the sector (e.g. "platea").
+ */
 @JsonIgnoreProperties(ignoreUnknown = true)
 data class IssuedTicket(
     val ticketId: String? = null,
-    val orderLineId: String? = null,
-    val seatId: String? = null,
+    val qrObjectKey: String? = null,
     val seatLabel: String? = null,
-    val sectorId: String? = null,
     val sector: String? = null,
 )

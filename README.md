@@ -3,7 +3,7 @@
 Sends the confirmation email to the customer when the tickets of an order have been issued.
 
 - **Stack:** Kotlin 2.3, Spring Boot 4.1, PostgreSQL 17, RabbitMQ.
-- **Input:** the `TicketsIssued` event published by Tickets on RabbitMQ (asynchronous only).
+- **Input:** the `TICKETS_ISSUED` event published by Tickets on RabbitMQ (asynchronous only).
 - **Output:** an email to the customer. For now the email is written to the log; a real
   SMTP server (e.g. Mailpit in docker compose) can be plugged in later by configuration only.
 
@@ -44,7 +44,7 @@ Requirements: Docker running, JDK 21 (Gradle is downloaded by the wrapper).
 ## Health
 
 `GET /api/v1/health` (no authentication, as in `notifications.yaml`): checks that the database
-answers and that the broker consumer is ready (RabbitMQ connection open and `TicketsIssued`
+answers and that the broker consumer is ready (RabbitMQ connection open and `TICKETS_ISSUED`
 listener running). Each check has a time limit (`notifications.health.check-timeout`, 2 s).
 
 | Result | Response |
@@ -64,14 +64,14 @@ Notifications declares its RabbitMQ objects from code at start-up (`RabbitConfig
 
 | Object | Name | Notes |
 |---|---|---|
-| Exchange (Tickets) | `tickets-events` | `topic`, durable. **Provisional**, to be agreed with Tickets |
-| Queue | `notifications.tickets-issued` | bound to `tickets-events` with routing key `tickets.issued` (provisional) |
+| Exchange (Tickets) | `tickets-events` | `topic`, durable; Tickets publishes `TICKETS_ISSUED` here |
+| Queue | `notifications.tickets-issued` | bound to `tickets-events` with routing key `tickets.issued` |
 | Dead letter exchange | `notifications.dlx` | `direct` |
 | Dead letter queue | `notifications.tickets-issued.dlq` | messages Notifications gave up on, kept for inspection |
 
 Names can be changed in `application.yaml` (`notifications.messaging.*`).
 
-What happens to a `TicketsIssued` message:
+What happens to a `TICKETS_ISSUED` message:
 
 | Case | Result |
 |---|---|
@@ -81,36 +81,42 @@ What happens to a `TicketsIssued` message:
 | Not valid JSON, unsupported `type`/`version`, missing or invalid `orderId`/`customerEmail` | rejected, moved to the dead letter queue |
 | Temporary error (e.g. database unavailable) | retried in the listener (3 attempts), then moved to the dead letter queue |
 
-### Provisional message format
+### Message format
 
-Until Tickets publishes `TicketsIssued`, it can be published by hand from the RabbitMQ
-management UI (`http://localhost:15672`): **Exchanges** → `tickets-events` → **Publish message**,
+The event as published by Tickets (Tickets repository: `src/events.rs`, `RABBIT_MQ.md`).
+Without Tickets running, it can be published by hand from the RabbitMQ management UI
+(`http://localhost:15672`): **Exchanges** → `tickets-events` → **Publish message**,
 routing key `tickets.issued`, property `content_type` = `application/json`, payload:
 
 ```json
 {
-  "eventId": "e5b0c1d2-0000-0000-0000-000000000001",
-  "type": "TicketsIssued",
+  "eventId": "85fb487d-28ce-4e47-a525-236fa564895a",
+  "type": "TICKETS_ISSUED",
   "version": 1,
-  "occurredAt": "2026-11-20T18:42:09Z",
   "producer": "tickets",
+  "occurredAt": "2026-11-25T17:00:00Z",
   "data": {
-    "orderId": "ord_01JD8W",
-    "customerEmail": "mario@example.com",
+    "orderId": "ordine-1",
+    "customerEmail": "customer@example.test",
     "customerName": "Mario Rossi",
-    "event": { "eventTitle": "Concerto X", "startsAt": "2026-12-05T20:30:00Z",
-               "venueName": "Teatro Y", "venueCity": "Torino" },
+    "event": { "eventTitle": "Concerto", "startsAt": "2026-12-10T20:00:00Z",
+               "venueName": "Teatro", "venueCity": "Torino" },
     "tickets": [
-      { "ticketId": "tkt_01JD9A", "orderLineId": "ol_1", "seatId": "seat_01JB7Q",
-        "seatLabel": "E14", "sectorId": "s1", "sector": "Platea" }
+      { "ticketId": "b63fe671-a440-4f05-afbf-585dcc28a388",
+        "qrObjectKey": "tickets/b63fe671-a440-4f05-afbf-585dcc28a388/qr.png",
+        "seatLabel": "E14", "sector": "platea" }
     ]
   }
 }
 ```
 
-Required: `type` (`TicketsIssued`), `version` (`1`), `data.orderId`, `data.customerEmail`, and
-`eventId` (or the AMQP `message_id` property). Every other field is optional, and unknown
-fields are ignored, so Tickets can add fields without breaking Notifications.
+Required: `type` (`TICKETS_ISSUED`), `version` (`1`), `data.orderId`, `data.customerEmail`, and
+`eventId` (or the AMQP `message_id` property). Every other field is optional (Tickets sends
+`customerName` only when known), and unknown fields are ignored, so Tickets can add fields
+without breaking Notifications.
+
+`qrObjectKey` is read but not used yet: the email is written to the log, so the QR images
+(in the private RustFS bucket of Tickets) are not attached.
 
 ## Sending job
 
@@ -175,7 +181,7 @@ creates the email: either both are stored or neither is.
 |---|---|
 | `id` | UUID identifier |
 | `external_message_id` | `eventId` of the event, unique |
-| `message_type` | e.g. `TicketsIssued` |
+| `message_type` | e.g. `TICKETS_ISSUED` |
 | `payload` | original content of the event, JSONB |
 | `received_at` | when the event was accepted |
 

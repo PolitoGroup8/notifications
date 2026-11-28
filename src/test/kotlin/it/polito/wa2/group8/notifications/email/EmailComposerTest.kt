@@ -56,6 +56,20 @@ class EmailComposerTest {
     }
 
     @Test
+    fun `a ticket without seat and sector is listed by its id`() {
+        val email = composer.composeTicketsIssued(
+            TicketsIssuedData(
+                orderId = "ord-4",
+                customerEmail = "anna@example.com",
+                tickets = listOf(IssuedTicket(ticketId = "tkt-9", qrObjectKey = "tickets/tkt-9/qr.png")),
+            ),
+        )
+
+        assertTrue("Biglietti (1):\n- biglietto tkt-9" in email.body.replace("\r\n", "\n"))
+        assertFalse("qr.png" in email.body, "the QR key is not shown in the email")
+    }
+
+    @Test
     fun `removes line breaks from the subject`() {
         val email = composer.composeTicketsIssued(
             TicketsIssuedData(

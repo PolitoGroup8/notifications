@@ -58,7 +58,7 @@ class TicketsIssuedListenerTest {
     }
 
     @Test
-    fun `a TicketsIssued event creates one PENDING email`() {
+    fun `a TICKETS_ISSUED event creates one PENDING email`() {
         publish(ticketsIssuedJson(eventId = "evt-1", orderId = "ord-1"))
 
         await atMost timeout untilAsserted {
@@ -67,10 +67,31 @@ class TicketsIssuedListenerTest {
         val email = emailNotificationsRepository.findByOrderId("ord-1").single()
         assertEquals("mario@example.com", email.recipient)
         assertEquals("I tuoi biglietti per Concerto X", email.subject)
-        assertTrue("posto E14" in email.body)
+        assertTrue(email.body.startsWith("Ciao Mario Rossi,"))
+        assertTrue("Data: 05/12/2026 20:30" in email.body)
+        assertTrue("Luogo: Teatro Y, Torino" in email.body)
+        assertTrue("- settore Platea, posto E14" in email.body)
         assertEquals(EmailStatus.PENDING, email.status)
         assertEquals(0, email.attempts)
         assertEquals(1, incomingMessagesRepository.count())
+    }
+
+    @Test
+    fun `customerName is optional, as Tickets omits it when unknown`() {
+        publish(ticketsIssuedJson(eventId = "evt-no-name", orderId = "ord-no-name", customerName = null))
+
+        await atMost timeout untilAsserted {
+            assertEquals(1, emailNotificationsRepository.findByOrderId("ord-no-name").size)
+        }
+        assertTrue(emailNotificationsRepository.findByOrderId("ord-no-name").single().body.startsWith("Ciao,"))
+    }
+
+    @Test
+    fun `another event type ends in the dead letter queue`() {
+        // e.g. the old provisional name: only TICKETS_ISSUED is accepted on this queue
+        publish(ticketsIssuedJson(eventId = "evt-old-type", orderId = "ord-old-type", type = "TicketsIssued"))
+
+        assertDeadLettered()
     }
 
     @Test
@@ -154,7 +175,7 @@ class TicketsIssuedListenerTest {
         assertEquals(255, tooLong.length)
         val event = TicketsIssuedMessage(
             eventId = "evt-long-mail",
-            type = "TicketsIssued",
+            type = "TICKETS_ISSUED",
             version = 1,
             data = TicketsIssuedData(orderId = "ord-long-mail", customerEmail = tooLong),
         )
@@ -184,24 +205,29 @@ class TicketsIssuedListenerTest {
         rabbitTemplate.send(properties.ticketsExchange, properties.ticketsIssuedRoutingKey, builder.build())
     }
 
+    /** A TICKETS_ISSUED event in the format published by Tickets (src/events.rs). */
     private fun ticketsIssuedJson(
         eventId: String?,
         orderId: String,
+        type: String = "TICKETS_ISSUED",
         version: Int = 1,
         email: String = "mario@example.com",
+        customerName: String? = "Mario Rossi",
     ): String {
         val eventIdField = if (eventId != null) "\"eventId\": \"$eventId\"," else ""
+        // Tickets adds customerName only when it is known
+        val customerNameField = if (customerName != null) "\"customerName\": \"$customerName\"," else ""
         return """
             {
               $eventIdField
-              "type": "TicketsIssued",
+              "type": "$type",
               "version": $version,
-              "occurredAt": "2026-11-20T18:42:09Z",
               "producer": "tickets",
+              "occurredAt": "2026-11-20T18:42:09Z",
               "data": {
                 "orderId": "$orderId",
                 "customerEmail": "$email",
-                "customerName": "Mario Rossi",
+                $customerNameField
                 "event": {
                   "eventTitle": "Concerto X",
                   "startsAt": "2026-12-05T19:30:00Z",
@@ -209,8 +235,8 @@ class TicketsIssuedListenerTest {
                   "venueCity": "Torino"
                 },
                 "tickets": [
-                  { "ticketId": "tkt-1", "orderLineId": "ol-1", "seatId": "seat-14",
-                    "seatLabel": "E14", "sectorId": "s1", "sector": "Platea" }
+                  { "ticketId": "tkt-1", "qrObjectKey": "tickets/tkt-1/qr.png",
+                    "seatLabel": "E14", "sector": "Platea" }
                 ],
                 "someFutureField": "ignored by the tolerant reader"
               }

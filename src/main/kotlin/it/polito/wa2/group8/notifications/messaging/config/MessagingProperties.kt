@@ -4,7 +4,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties
 
 /**
  * Names of the RabbitMQ objects used by Notifications, read from `notifications.messaging.*`
- * (see application.yaml). The Tickets names are provisional until agreed with Tickets.
+ * (see application.yaml). The Tickets names are the ones Tickets publishes to (src/rabbitmq.rs).
  *
  * @property ticketsExchange        exchange on which Tickets publishes its events.
  * @property ticketsIssuedRoutingKey routing key of the TicketsIssued events.
