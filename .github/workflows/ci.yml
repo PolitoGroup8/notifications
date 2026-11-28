@@ -1,0 +1,62 @@
+# Continuous integration of the Notifications service.
+# Builds the project, runs ALL the tests (unit + integration with real PostgreSQL and
+# RabbitMQ started by Testcontainers) and checks that the Docker image builds.
+
+name: CI
+
+on:
+  push:
+    branches: [dev, main]
+  pull_request:
+    branches: [dev, main]
+  # "Run workflow" button in the Actions tab, to start it by hand on any branch.
+  workflow_dispatch:
+
+# The workflow only reads the repository.
+permissions:
+  contents: read
+
+# A new push on the same branch / pull request cancels the run still in progress.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build and test
+    # GitHub-hosted Linux machine: Docker is already installed, so Testcontainers works as is.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+
+      # Same JDK as the Dockerfile (eclipse-temurin 21).
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      # Caches the Gradle downloads between runs and validates the wrapper jar.
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # build = compile + all the tests + jar. Fails the workflow if any test fails.
+      - name: Build and run the tests
+        run: ./gradlew build --no-daemon
+
+      # On failure, keep the HTML test report: download it from the run page to see
+      # which test failed and why, without running the tests locally.
+      - name: Upload the test report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report
+          path: build/reports/tests/test
+          retention-days: 7
+
+      # The image used by docker compose must keep building.
+      - name: Build the Docker image
+        run: docker build --tag notifications:ci .

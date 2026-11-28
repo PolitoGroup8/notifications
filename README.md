@@ -149,6 +149,17 @@ be used as `Message-ID`, so the two copies are recognisable as the same message.
 The tests start their own PostgreSQL and RabbitMQ with Testcontainers (profile `test`):
 Docker must be running, the `.env` file is not needed.
 
+### Continuous integration
+
+GitHub Actions (`.github/workflows/ci.yml`) runs on every push to `dev` / `main`, on every
+pull request towards them, and by hand from the **Actions** tab (*Run workflow*):
+
+1. `./gradlew build`: compiles and runs all the tests, Testcontainers included (the GitHub
+   Linux runner has Docker);
+2. `docker build`: checks that the image used by docker compose still builds.
+
+If a test fails, the HTML test report is attached to the run as the `test-report` artifact.
+
 ## Database
 
 The schema is created by Flyway (`src/main/resources/db/migration`).
