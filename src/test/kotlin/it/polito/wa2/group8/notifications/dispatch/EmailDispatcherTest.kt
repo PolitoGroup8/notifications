@@ -180,7 +180,7 @@ class EmailDispatcherTest {
 
     /** Inserts a PENDING email for [orderId], due since [dueSince]; returns its id. */
     private fun pendingEmail(orderId: String, dueSince: Duration = Duration.ofSeconds(1)): UUID {
-        val incomingId = incomingMessagesRepository.insertIfNew("evt-$orderId", "TicketsIssued", "{}")!!
+        val incomingId = incomingMessagesRepository.insertIfNew("evt-$orderId", "TICKETS_ISSUED", "{}")!!
         val id = emailNotificationsRepository.insertIfNoEmailForOrder(
             incomingMessageId = incomingId,
             orderId = orderId,
